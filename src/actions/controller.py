@@ -7,8 +7,8 @@ updates state using navigation rules, and dispatches Events to subscribers.
 
 import dataclasses
 from typing import Callable, List, Optional
-
-from src.communication.commands import (
+from modeling.state import State
+from communication.commands import (
     Command,
     OpenBook,
     Pause,
@@ -20,7 +20,7 @@ from src.communication.commands import (
     SetVoice,
     Stop,
 )
-from src.communication.events import (
+from communication.events import (
     BookLoaded,
     ChapterChanged,
     ErrorOccurred,
@@ -33,7 +33,7 @@ from src.communication.events import (
     VoiceSet,
     WordHighlighted,
 )
-from src.actions import navigation
+from actions import navigation
 
 
 # Callback type for event subscribers (UI, Audio Player, Visualizer)
