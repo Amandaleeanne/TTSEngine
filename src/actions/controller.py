@@ -1,61 +1,127 @@
+"""
+This module implements the central engine Controller.
+
+The Controller manages the application State, receives typed Commands,
+updates state using navigation rules, and dispatches Events to subscribers.
+"""
+
 import dataclasses
-from typing import Callable
+from typing import Callable, List, Optional
 
-from communication.commands import EngineCommand, Play, Pause, SeekSentence, SeekChapter
-from communication.events import (
-    EngineEvent,
-    PlaybackStarted,
-    PlaybackPaused,
-    SentenceChanged,
+from src.communication.commands import (
+    Command,
+    OpenBook,
+    Pause,
+    Play,
+    SeekChapter,
+    SeekSentence,
+    SeekWord,
+    SetSpeed,
+    SetVoice,
+    Stop,
 )
-from modeling.state import State
-from actions import navigation
+from src.communication.events import (
+    BookLoaded,
+    ChapterChanged,
+    ErrorOccurred,
+    Event,
+    PlaybackPaused,
+    PlaybackStarted,
+    PlaybackStopped,
+    SentenceChanged,
+    SpeedSet,
+    VoiceSet,
+    WordHighlighted,
+)
+from src.actions import navigation
 
 
-Subscriber = Callable[[EngineEvent], None]
+# Callback type for event subscribers (UI, Audio Player, Visualizer)
+EventCallback = Callable[[Event], None]
 
 
 class Controller:
-    """Engine controller that handles commands and emits events."""
+    """Central engine controller coordinating commands, state updates, and events."""
 
-    def __init__(self) -> None:
-        self._state = State()
-        self._subscribers: list[Subscriber] = []
+    def __init__(self, initial_state: Optional[State] = None) -> None:
+        self._state: State = initial_state if initial_state is not None else State()
+        self._subscribers: List[EventCallback] = []
 
     @property
     def state(self) -> State:
+        """Returns the current immutable state snapshot."""
         return self._state
 
-    def subscribe(self, subscriber: Subscriber) -> None:
-        self._subscribers.append(subscriber)
+    def subscribe(self, callback: EventCallback) -> None:
+        """Subscribes a listener to receive engine events."""
+        if callback not in self._subscribers:
+            self._subscribers.append(callback)
 
-    def unsubscribe(self, subscriber: Subscriber) -> None:
-        if subscriber in self._subscribers:
-            self._subscribers.remove(subscriber)
+    def unsubscribe(self, callback: EventCallback) -> None:
+        """Unsubscribes an event listener."""
+        if callback in self._subscribers:
+            self._subscribers.remove(callback)
 
-    def _emit(self, event: EngineEvent) -> None:
-        for subscriber in list(self._subscribers):
-            subscriber(event)
+    def _emit(self, event: Event) -> None:
+        """Broadcasts an event to all registered subscribers."""
+        for callback in self._subscribers:
+            callback(event)
 
-    def handle_command(self, command: EngineCommand) -> None:
-        if isinstance(command, Play):
-            self._state = dataclasses.replace(self._state, is_playing=True)
-            self._emit(PlaybackStarted())
-            return
+    def handle_command(self, command: Command) -> None:
+        """
+        Processes an incoming typed command, computes the new state,
+        and emits corresponding events.
+        """
+        try:
+            match command:
+                case Play():
+                    if not self._state.is_playing:
+                        self._state = dataclasses.replace(self._state, is_playing=True)
+                        self._emit(PlaybackStarted())
 
-        if isinstance(command, Pause):
-            self._state = dataclasses.replace(self._state, is_playing=False)
-            self._emit(PlaybackPaused())
-            return
+                case Pause():
+                    if self._state.is_playing:
+                        self._state = dataclasses.replace(self._state, is_playing=False)
+                        self._emit(PlaybackPaused())
 
-        if isinstance(command, SeekSentence):
-            self._state = navigation.seek_to_sentence(self._state, command.sentence_index)
-            self._emit(SentenceChanged(sentence_index=self._state.current_sentence_index))
-            return
+                case Stop():
+                    if self._state.is_playing:
+                        self._state = dataclasses.replace(self._state, is_playing=False)
+                        self._emit(PlaybackStopped())
 
-        if isinstance(command, SeekChapter):
-            self._state = navigation.seek_to_chapter(self._state, command.chapter_index)
-            self._emit(SentenceChanged(sentence_index=self._state.current_sentence_index))
-            return
+                case SeekSentence() as cmd:
+                    old_sentence = self._state.current_sentence_index
+                    old_chapter = self._state.current_chapter_index
 
-        # Unsupported commands are ignored for now.
+                    self._state = navigation.seek_to_sentence(self._state, cmd.sentence_index)
+
+                    if self._state.current_chapter_index != old_chapter:
+                        self._emit(ChapterChanged(chapter_index=self._state.current_chapter_index))
+                    if self._state.current_sentence_index != old_sentence:
+                        self._emit(SentenceChanged(sentence_index=self._state.current_sentence_index))
+
+                case SeekChapter() as cmd:
+                    old_chapter = self._state.current_chapter_index
+                    self._state = navigation.seek_to_chapter(self._state, cmd.chapter_index)
+
+                    if self._state.current_chapter_index != old_chapter:
+                        self._emit(ChapterChanged(chapter_index=self._state.current_chapter_index))
+                        self._emit(SentenceChanged(sentence_index=self._state.current_sentence_index))
+
+                case SeekWord() as cmd:
+                    self._state = navigation.seek_to_word(self._state, cmd.word_index)
+                    self._emit(WordHighlighted(word_index=self._state.current_word_index))
+
+                case SetSpeed() as cmd:
+                    self._state = dataclasses.replace(self._state, speed=cmd.speed)
+                    self._emit(SpeedSet(speed=cmd.speed))
+
+                case SetVoice() as cmd:
+                    self._state = dataclasses.replace(self._state, voice=cmd.voice)
+                    self._emit(VoiceSet(voice=cmd.voice))
+
+                case OpenBook():
+                    pass
+
+        except Exception as err:
+            self._emit(ErrorOccurred(message=str(err)))
