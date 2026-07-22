@@ -8,7 +8,7 @@ TTSEngine doesn't play audio or synthesize speech itself. Instead, it owns the *
 
 ## Status
 
-This is an early-stage / work-in-progress library. The core data model, command layer, event layer, and navigation logic are implemented and unit-tested. **TTS synthesis, audio playback, and document loading (EPUB/PDF/TXT parsing) are not implemented yet** — those are the pieces external consumers are expected to plug in (see [Roadmap](#roadmap--not-yet-implemented) and [Known Issues](#known-issues)).
+Core data model, command layer, event layer, navigation logic, and the controller are implemented, internally consistent, and fully unit-tested (51 passing tests). **TTS synthesis, audio playback, and document loading (EPUB/PDF/TXT parsing) are not implemented yet** — those are the pieces external consumers are expected to plug in (see [Roadmap](#roadmap--not-yet-implemented)).
 
 ## Architecture
 
@@ -36,15 +36,7 @@ Frontend / TTS Provider / Audio Player  (subscribed listeners)
 ```bash
 git clone https://github.com/Amandaleeanne/TTSEngine.git
 cd TTSEngine
-pip install -e .
-pip install -r requirements.txt  # installs pytest and any development requirements
-```
-
-Because this repository uses a `src/` layout, either install the package editably or run code from the repository root with `PYTHONPATH=src`.
-
-```bash
-PYTHONPATH=src python3 your_script.py
-PYTHONPATH=src pytest
+pip install -r requirements.txt   # installs the package in editable mode + pytest
 ```
 
 The package has no third-party runtime dependencies — it's pure standard-library Python (3.10+, for `match`/`case` and `dataclasses`).
@@ -64,10 +56,11 @@ src/
     controller.py     # Controller: routes commands, updates State, emits events
 docs/
   design.md          # Full design document / intended architecture
-examples/
-  create_book.py      # Example of constructing a Document (currently out of date, see below)
+  examples.md          # Worked example use cases
 tests/                 # pytest suite covering models, state, commands, events, navigation, controller
 ```
+
+All modules under `src/` import each other using plain package paths (e.g. `from modeling.state import State`, `from communication.commands import Play`) — there is a single, consistent import scheme across the codebase. That means the only thing you need on `PYTHONPATH` is `src/` itself.
 
 ## Quick Start
 
@@ -77,7 +70,7 @@ from modeling.state import State
 from communication.commands import Play, Pause, SeekSentence, SetSpeed
 from actions.controller import Controller
 
-# 1. Build a document (see examples/text_to_document.py for a real loader)
+# 1. Build a document (see docs/examples.md for a real text loader)
 w0 = Word(text="Hello", start_time=0.0, end_time=0.5, word_index=0)
 w1 = Word(text="world", start_time=0.5, end_time=1.0, word_index=1)
 sentence = Sentence(text="Hello world.", words=(w0, w1), sentence_index=0)
@@ -100,11 +93,20 @@ controller.handle_command(Pause())
 print(controller.state.current_sentence.text)  # "Hello world."
 ```
 
-> **Note on imports:** run this from the repository root with both the repo root *and* `src/` on `PYTHONPATH` (see [Known Issues](#known-issues) for why, and how to simplify this).
+Run it with `src/` on `PYTHONPATH`:
 
 ```bash
-PYTHONPATH=".:src" python3 your_script.py
+PYTHONPATH="src" python3 your_script.py
 ```
+
+```
+EVENT: PlaybackStarted()
+EVENT: SpeedSet(speed=1.25)
+EVENT: PlaybackPaused()
+Hello world.
+```
+
+(Notice there's no `SentenceChanged` event above — `SeekSentence(sentence_index=0)` was a no-op because the state was already at sentence 0. The controller only emits events when something actually changes.)
 
 ## Core Concepts
 
@@ -131,7 +133,7 @@ Commands are validated at construction time (`__post_init__`) — e.g. `SetSpeed
 | Command | Purpose |
 |---|---|
 | `Play()`, `Pause()`, `Stop()` | Playback control |
-| `OpenBook(file_path)` | Request to load a document (see [Known Issues](#known-issues) — not yet wired up) |
+| `OpenBook(file_path)` | Request to load a document (validated, but not yet wired to actually load — see [Roadmap](#roadmap--not-yet-implemented)) |
 | `SeekSentence(sentence_index)` | Jump to a specific sentence |
 | `SeekChapter(chapter_index)` | Jump to the start of a specific chapter |
 | `SeekWord(word_index)` | Jump to / highlight a specific word |
@@ -140,7 +142,7 @@ Commands are validated at construction time (`__post_init__`) — e.g. `SetSpeed
 
 ### Events (`communication/events.py`)
 
-Events are what subscribers receive back from the `Controller`.
+Events are what subscribers receive back from the `Controller`. The controller only emits an event when the relevant piece of state actually changes (e.g. calling `Play()` while already playing emits nothing).
 
 | Event | Fired when |
 |---|---|
@@ -149,7 +151,7 @@ Events are what subscribers receive back from the `Controller`.
 | `SentenceChanged(sentence_index)` | The current sentence changes |
 | `WordHighlighted(word_index)` | The current word changes |
 | `SpeedSet(speed)` / `VoiceSet(voice)` | A setting changes |
-| `BookLoaded(file_path, document)` | A document finishes loading (not yet emitted — see below) |
+| `BookLoaded(file_path, document)` | A document finishes loading (not yet emitted — `OpenBook` isn't wired up yet) |
 | `ErrorOccurred(message)` | A command raised an exception while being handled |
 
 ### Controller (`actions/controller.py`)
@@ -162,36 +164,25 @@ Pure functions of the form `State -> State`, used internally by the `Controller`
 
 `seek_to_sentence`, `next_sentence`, `previous_sentence`, `seek_to_chapter`, `next_chapter`, `previous_chapter`, `seek_to_word`. All seeking is clamped to valid document bounds and correctly resolves parent chapter/paragraph indices.
 
-## Known Issues
-
-While reviewing the current source for this README, bugs were found that will affect anyone trying to use the engine as-is:
-
-
-1. **`OpenBook` doesn't actually load anything.** The command validates that the file exists, but `Controller.handle_command`'s `case OpenBook(): pass` is a no-op — no `Document` is built, no `BookLoaded` event is emitted, and `State.document` never gets set from a file path. A document provider (TXT/EPUB/PDF parser) still needs to be built and wired in here.
-
-
 ## Roadmap / Not Yet Implemented
 
 Per `docs/design.md`, the intended full system also includes pieces not yet in this repo:
 
+- **`OpenBook` command handling** — right now `Controller.handle_command`'s `case OpenBook(): pass` is a no-op. It validates that the file exists but doesn't parse it into a `Document`, update `State.document`, or emit `BookLoaded`.
+- **Document providers** — TXT/EPUB/PDF/Markdown loaders that produce a `Document` (see `docs/examples.md` for a minimal hand-rolled text loader you can use in the meantime)
 - **TTS provider interface** — an abstract `synthesize(text) -> audio + word timings` boundary (Edge TTS, Piper, Azure, ElevenLabs, local models, etc.)
 - **Audio backend** — play/pause/stop/seek over an actual audio stream (pygame, VLC, system audio, etc.)
-- **Document providers** — TXT/EPUB/PDF/Markdown loaders that produce a `Document`
-- **Persistence** — saving/restoring library position, bookmarks, and settings
+- **Persistence** — saving/restoring library position, bookmarks, and settings (see `docs/examples.md` for a simple pattern using `State`'s plain fields)
 - **Caching strategy** — synthesizing only the current chapter / a sliding window of nearby sentences instead of a whole book at once
 
 ## Running Tests
 
 ```bash
-pip install -e .
+pip install -e . pytest
 pytest
 ```
 
-If you don't install the package editably, run pytest from the repository root with `PYTHONPATH=src`:
-
-```bash
-PYTHONPATH=src pytest
-```
+All 51 tests currently pass.
 
 ## License
 

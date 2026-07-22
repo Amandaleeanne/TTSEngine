@@ -2,7 +2,11 @@
 
 TTSEngine's job is narrow on purpose: it tracks *where you are* in a document and *what the playback settings are*, and it tells subscribers when that changes. It doesn't synthesize speech or play audio. Every example below shows a different way that narrow job turns into something useful once a real frontend, TTS provider, or audio backend is plugged in.
 
-All examples were tested against the current source with the import workaround described in `README.md`'s Known Issues section (`from src.communication.commands import ...`, run with `PYTHONPATH=".:src"`).
+All examples were tested against the current source. Run them with `src/` on `PYTHONPATH`:
+
+```bash
+PYTHONPATH="src" python3 your_script.py
+```
 
 ## 1. Audiobook-style seeking (skip forward/back, jump chapters)
 
@@ -77,7 +81,7 @@ This is the engine's core purpose, spelled out: "a python engine that signals ev
 
 ```python
 from communication.commands import Play, SeekSentence
-from communication.events import SentenceChanged, PlaybackStarted
+from communication.events import SentenceChanged
 from actions.controller import Controller
 from modeling.state import State
 
@@ -94,10 +98,12 @@ def on_event(event):
 
 controller.subscribe(on_event)
 controller.handle_command(Play())
-controller.handle_command(SeekSentence(sentence_index=0))
+controller.handle_command(SeekSentence(sentence_index=2))
 ```
 
 Because the engine only emits an event and never calls a TTS library directly, you can swap providers (or run several — e.g. one for audio, one for live captions) without touching engine code.
+
+> The controller only emits `SentenceChanged` when the sentence index actually changes — seeking to `0` on a document that's already at sentence `0` won't fire anything, which is why this example seeks to sentence `2`.
 
 ## 4. Word-by-word highlighting for a reading UI
 
@@ -159,7 +165,7 @@ new_controller.handle_command(SetSpeed(speed=restored["speed"]))
 new_controller.handle_command(SetVoice(voice=restored["voice"]))
 
 print(new_controller.state.current_sentence.text, new_controller.state.speed)
-# -> "The end." 1.5
+# -> "Sentence 1" 1.5
 ```
 
 ## 6. Multiple frontends sharing one engine instance
@@ -190,4 +196,4 @@ Both subscribers receive every event, and neither knows the other exists — thi
 
 ---
 
-For the `build_demo_document()` helper used above, see the tested version in `README.md`'s Quick Start section or `tests/test_actions.py`'s `multi_chapter_doc` fixture, which builds a 3-chapter, 2-sentences-per-chapter document.
+For the `build_demo_document()` helper used above, see `tests/test_actions.py`'s `multi_chapter_doc` fixture, which builds a 3-chapter, 2-sentences-per-chapter document — or construct one the same way as the Quick Start example in `README.md`.
