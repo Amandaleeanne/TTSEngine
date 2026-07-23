@@ -6,6 +6,8 @@ TTSEngine doesn't play audio or synthesize speech itself. Instead, it owns the *
 
 > This project was originally created as a sub-project of a larger TTS/accessibility application.
 
+Disclaimer: I have never written an engine before, so a lot of this code is extremely AI with design directions directed by me based on how I would want to use it.. If there are inconsistancies, it is because I am on the free plan of three different AI's writing and my copy/paste and patchwork reviewing/commenting.
+
 ## Status
 
 Core data model, command layer, event layer, navigation logic, and the controller are implemented, internally consistent, and fully unit-tested (51 passing tests). **TTS synthesis, audio playback, and document loading (EPUB/PDF/TXT parsing) are not implemented yet** — those are the pieces external consumers are expected to plug in (see [Roadmap](#roadmap--not-yet-implemented)).
