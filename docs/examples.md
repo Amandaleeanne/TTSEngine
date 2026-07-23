@@ -15,7 +15,6 @@ A common audiobook UI need: "skip forward 3 sentences" or "jump to Chapter 1" bu
 ```python
 from modeling.models import Document, Chapter, Paragraph, Sentence, Word
 from modeling.state import State
-from communication.commands import SeekSentence, SeekChapter, Play, Pause
 from actions.controller import Controller
 
 document = build_demo_document()  # returns a Document, see models.py
@@ -23,14 +22,14 @@ controller = Controller(initial_state=State(document=document))
 
 def skip_forward(controller, n_sentences=5):
     target = controller.state.current_sentence_index + n_sentences
-    controller.handle_command(SeekSentence(sentence_index=target))
+    controller.seek_sentence(target)
 
-controller.handle_command(Play())
+controller.play()
 skip_forward(controller, n_sentences=3)
 print(controller.state.current_chapter.title, controller.state.current_sentence.text)
 
-controller.handle_command(SeekChapter(chapter_index=0))  # jump back to Chapter 1
-controller.handle_command(Pause())
+controller.seek_chapter(0)  # jump back to Chapter 1
+controller.pause()
 ```
 
 `seek_to_sentence` clamps out-of-range targets to the nearest valid sentence and automatically resolves the correct chapter/paragraph, so "skip forward" never has to worry about crossing a chapter boundary.
@@ -80,7 +79,6 @@ print(doc.total_sentences)  # 3
 This is the engine's core purpose, spelled out: "a python engine that signals events for other TTS applications to pick up and use." The engine tells you *what sentence is now current*; a separate TTS provider (Edge TTS, Piper, pyttsx3, ElevenLabs, etc.) turns that into audio.
 
 ```python
-from communication.commands import Play, SeekSentence
 from communication.events import SentenceChanged
 from actions.controller import Controller
 from modeling.state import State
@@ -97,8 +95,8 @@ def on_event(event):
             print(f"[TTS] synthesizing: {sentence.text!r}")
 
 controller.subscribe(on_event)
-controller.handle_command(Play())
-controller.handle_command(SeekSentence(sentence_index=2))
+controller.play()
+controller.seek_sentence(2)
 ```
 
 Because the engine only emits an event and never calls a TTS library directly, you can swap providers (or run several — e.g. one for audio, one for live captions) without touching engine code.
@@ -110,7 +108,6 @@ Because the engine only emits an event and never calls a TTS library directly, y
 Screen readers and read-along UIs need to highlight the exact word being spoken. Once a TTS provider reports word timing, the engine's `SeekWord` command / `WordHighlighted` event can drive that highlight independent of the UI framework:
 
 ```python
-from communication.commands import SeekWord
 from communication.events import WordHighlighted
 from actions.controller import Controller
 from modeling.state import State
@@ -127,7 +124,7 @@ controller.subscribe(highlight_word)
 
 # Simulating word-boundary callbacks coming from a TTS engine mid-sentence:
 for word_index in range(0, 4):
-    controller.handle_command(SeekWord(word_index=word_index))
+    controller.seek_word(word_index)
 ```
 
 A terminal UI would print styled text here; a web frontend would update a DOM highlight class; a screen reader integration would move its cursor — the engine doesn't care which.

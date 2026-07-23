@@ -42,6 +42,10 @@ class SentenceChanged(EngineEvent):
 class ChapterChanged(EngineEvent):
     chapter_index: int
 
+@dataclass(frozen=True)
+class ParagraphChanged(EngineEvent):
+    paragraph_index: int
+
 
 # --- Book and Setting Events ---
 @dataclass(frozen=True)
@@ -78,6 +82,7 @@ Event = (
     | ProgressChanged
     | WordHighlighted
     | SentenceChanged
+    | ParagraphChanged
     | ChapterChanged
     | BookLoaded
     | SpeedSet

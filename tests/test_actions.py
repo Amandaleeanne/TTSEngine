@@ -12,7 +12,6 @@ import pytest
 
 from modeling.models import Document, Chapter, Paragraph, Sentence, Word
 from modeling.state import State
-from communication.commands import *
 from communication.events import *
 from actions import navigation
 from actions.controller import Controller
@@ -161,13 +160,11 @@ class TestController:
         # Manually set state to loaded document for testing
         controller._state = State(document=multi_chapter_doc)
 
-        # Dispatch Play command
-        controller.handle_command(Play())
+        controller.Play()
         assert controller.state.is_playing is True
         assert any(isinstance(e, PlaybackStarted) for e in received_events)
 
-        # Dispatch Pause command
-        controller.handle_command(Pause())
+        controller.Pause()
         assert controller.state.is_playing is False
         assert any(isinstance(e, PlaybackPaused) for e in received_events)
 
@@ -178,11 +175,58 @@ class TestController:
         controller.subscribe(lambda event: received_events.append(event))
         controller._state = State(document=multi_chapter_doc, current_sentence_index=0)
 
-        # Seek to sentence 3
-        controller.handle_command(SeekSentence(sentence_index=3))
+        controller.seek_sentence(3)
 
         assert controller.state.current_sentence_index == 3
         assert any(isinstance(e, SentenceChanged) and e.sentence_index == 3 for e in received_events)
+
+    def test_paragraph_changed_emitted_on_sentence_and_word_seek(self):
+        """Comprehensive check: ParagraphChanged should be emitted when paragraph index changes
+        due to sentence or word seeks within a document that contains multiple paragraphs."""
+        # Build a document with two paragraphs in the same chapter
+        # Sentences: 0,1 in paragraph 0; sentence 2 in paragraph 1
+        w0 = Word(text="W0", start_time=0.0, end_time=0.5, word_index=0)
+        w1 = Word(text="W1", start_time=0.5, end_time=1.0, word_index=1)
+        s0 = Sentence(text="S0", words=(w0, w1), sentence_index=0)
+
+        w2 = Word(text="W2", start_time=1.0, end_time=1.5, word_index=2)
+        w3 = Word(text="W3", start_time=1.5, end_time=2.0, word_index=3)
+        s1 = Sentence(text="S1", words=(w2,), sentence_index=1)
+
+        w4 = Word(text="W4", start_time=2.0, end_time=2.5, word_index=3)
+        s2 = Sentence(text="S2", words=(w4,), sentence_index=2)
+
+        p0 = Paragraph(sentences=(s0, s1), paragraph_index=0)
+        p1 = Paragraph(sentences=(s2,), paragraph_index=1)
+
+        ch0 = Chapter(title="C0", paragraphs=(p0, p1), chapter_index=0)
+        doc = Document(title="ParaTest", chapters=(ch0,))
+
+        controller = Controller()
+        controller._state = State(document=doc, current_sentence_index=0, current_paragraph_index=0)
+
+        events = []
+        controller.subscribe(events.append)
+
+        # Seek to sentence 2 which belongs to paragraph_index == 1
+        controller.seek_sentence(2)
+
+        assert controller.state.current_sentence_index == 2
+        assert controller.state.current_paragraph_index == 1
+        assert any(isinstance(e, ParagraphChanged) and e.paragraph_index == 1 for e in events)
+
+        # Clear events and seek back to sentence 0 => paragraph should change back to 0
+        events.clear()
+        controller.seek_sentence(0)
+        assert controller.state.current_paragraph_index == 0
+        assert any(isinstance(e, ParagraphChanged) and e.paragraph_index == 0 for e in events)
+
+        # Finally, seek by word into sentence 2 and confirm paragraph event occurs
+        events.clear()
+        controller.seek_word(4)  # word_index for s2 is 4
+        assert controller.state.current_sentence_index == 2
+        assert controller.state.current_paragraph_index == 1
+        assert any(isinstance(e, ParagraphChanged) and e.paragraph_index == 1 for e in events)
 
     def test_controller_play_idempotency(self):
         """Calling Play twice should only emit PlaybackStarted once."""
@@ -190,8 +234,8 @@ class TestController:
         events = []
         controller.subscribe(events.append)
 
-        controller.handle_command(Play())
-        controller.handle_command(Play())
+        controller.Play()
+        controller.Play()
 
         playback_events = [e for e in events if isinstance(e, PlaybackStarted)]
         assert len(playback_events) == 1
@@ -201,9 +245,9 @@ class TestController:
         """Stop command should pause playback and emit PlaybackStopped."""
         events = []
         loaded_controller.subscribe(events.append)
-        loaded_controller.handle_command(Play())
+        loaded_controller.Play()
         
-        loaded_controller.handle_command(Stop())
+        loaded_controller.Stop()
 
         assert not loaded_controller.state.is_playing
         assert any(isinstance(e, PlaybackStopped) for e in events)
@@ -214,8 +258,8 @@ class TestController:
         events = []
         loaded_controller.subscribe(events.append)
 
-        loaded_controller.handle_command(SetSpeed(speed=1.75))
-        loaded_controller.handle_command(SetVoice(voice="en-US-Neural"))
+        loaded_controller.set_speed(1.75)
+        loaded_controller.set_voice("en-US-Neural")
 
         assert loaded_controller.state.speed == 1.75
         assert loaded_controller.state.voice == "en-US-Neural"
@@ -232,11 +276,11 @@ class TestController:
         controller.subscribe(callback)
         controller.subscribe(callback)  # Deduplicated
 
-        controller.handle_command(Play())
+        controller.Play()
         assert len(events) == 1
 
         controller.unsubscribe(callback)
-        controller.handle_command(Pause())
+        controller.Pause()
         assert len(events) == 1  # No new event captured
 
 
@@ -250,7 +294,7 @@ class TestController:
 
         monkeypatch.setattr("actions.navigation.seek_to_sentence", crashing_seek)
 
-        loaded_controller.handle_command(SeekSentence(sentence_index=1))
+        loaded_controller.seek_sentence(1)
 
         assert any(isinstance(e, ErrorOccurred) and "Simulated engine failure" in e.message for e in events)
 
@@ -272,12 +316,12 @@ class TestController:
         controller.subscribe(emitted_events.append)
 
         # 3. Start playback
-        controller.handle_command(Play())
+        controller.Play()
         assert controller.state.is_playing
         assert any(isinstance(e, PlaybackStarted) for e in emitted_events)
 
         # 4. Advance to last sentence
-        controller.handle_command(SeekSentence(sentence_index=1))
+        controller.seek_sentence(1)
         
         # 5. Verify progress and end of playback triggering
         assert any(isinstance(e, ProgressChanged) and e.progress_percentage == 100.0 for e in emitted_events)

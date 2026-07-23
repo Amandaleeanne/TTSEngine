@@ -6,13 +6,11 @@ updates state using navigation rules, and dispatches Events to subscribers.
 """
 
 import dataclasses
-from os import path
-from importlib.resources import path
 from typing import Callable, List, Optional
 from modeling.state import State
-from communication.commands import *
 from communication.events import *
 from actions import navigation
+from providers.registry import ProviderRegistry
 
 
 # Callback type for event subscribers (UI, Audio Player, Visualizer)
@@ -22,9 +20,10 @@ EventCallback = Callable[[Event], None]
 class Controller:
     """Central engine controller coordinating commands, state updates, and events."""
 
-    def __init__(self, initial_state: Optional[State] = None) -> None:
+    def __init__(self, initial_state: Optional[State] = None, registry: Optional[ProviderRegistry] = None) -> None:
         self._state: State = initial_state if initial_state is not None else State()
         self._subscribers: List[EventCallback] = []
+        self._registry: ProviderRegistry = registry if registry is not None else ProviderRegistry()
 
     @property
     def state(self) -> State:
@@ -46,73 +45,128 @@ class Controller:
         for callback in self._subscribers:
             callback(event)
 
-    def handle_command(self, command: Command) -> None:
+    # --- Command Handler ---
+    def play(self) -> None:
         """
-        Processes an incoming typed command, computes the new state,
-        and emits corresponding events.
+        Updates the state of the engine and emits the play event
         """
         try:
-            match command:
-                case Play():
-                    if not self._state.is_playing:
-                        self._state = dataclasses.replace(self._state, is_playing=True)
-                        self._emit(PlaybackStarted())
-
-                case Pause():
-                    if self._state.is_playing:
-                        self._state = dataclasses.replace(self._state, is_playing=False)
-                        self._emit(PlaybackPaused())
-
-                case Stop():
-                    if self._state.is_playing:
-                        self._state = dataclasses.replace(self._state, is_playing=False)
-                        self._emit(PlaybackStopped())
-
-                case SeekSentence() as cmd:
-                    old_sentence = self._state.current_sentence_index
-                    old_chapter = self._state.current_chapter_index
-
-                    self._state = navigation.seek_to_sentence(self._state, cmd.sentence_index)
-
-                    if self._state.current_chapter_index != old_chapter:
-                        self._emit(ChapterChanged(chapter_index=self._state.current_chapter_index))
-                    if self._state.current_sentence_index != old_sentence:
-                        self._emit(SentenceChanged(sentence_index=self._state.current_sentence_index))
-
-                    # Progress event emission
-                    if self._state.document and self._state.document.total_sentences > 0:
-                        progress = (self._state.current_sentence_index + 1) / self._state.document.total_sentences * 100.0
-                        self._emit(ProgressChanged(progress_percentage=round(progress, 2)))
-
-                    # Detect end-of-book state
-                    if self._state.document and self._state.current_sentence_index >= self._state.document.total_sentences - 1:
-                        if self._state.is_playing:
-                            self._state = dataclasses.replace(self._state, is_playing=False)
-                            self._emit(PlaybackFinished(total_sentences_read=self._state.document.total_sentences))
-                case SeekChapter() as cmd:
-                    old_chapter = self._state.current_chapter_index
-                    self._state = navigation.seek_to_chapter(self._state, cmd.chapter_index)
-
-                    if self._state.current_chapter_index != old_chapter:
-                        self._emit(ChapterChanged(chapter_index=self._state.current_chapter_index))
-                        self._emit(SentenceChanged(sentence_index=self._state.current_sentence_index))
-
-                case SeekWord() as cmd:
-                    self._state = navigation.seek_to_word(self._state, cmd.word_index)
-                    self._emit(WordHighlighted(word_index=self._state.current_word_index))
-
-                case SetSpeed() as cmd:
-                    self._state = dataclasses.replace(self._state, speed=cmd.speed)
-                    self._emit(SpeedSet(speed=cmd.speed))
-
-                case SetVoice() as cmd:
-                    self._state = dataclasses.replace(self._state, voice=cmd.voice)
-                    self._emit(VoiceSet(voice=cmd.voice))
-
-                case OpenBook():
-                    doc = self._registry.load(path)
-                    self._state = State(document=doc, file_path=path)
-                    self._emit(BookLoaded(document=doc))
-
+            if not self.state.is_playing:
+                self._state = dataclasses.replace(self._state, is_playing=True)
+                self._emit(PlaybackStarted())
         except Exception as err:
             self._emit(ErrorOccurred(message=str(err)))
+
+    # Backwards-compatible capitalized method names
+    def Play(self) -> None:
+        self.play()
+
+    def pause(self) -> None:
+        """
+        Updates the state of the engine and emits the Pause event
+        """
+        try:
+            if self._state.is_playing:
+                self._state = dataclasses.replace(self._state, is_playing=False)
+                self._emit(PlaybackPaused())
+        except Exception as err:
+                    self._emit(ErrorOccurred(message=str(err)))
+
+    def Pause(self) -> None:
+        self.pause()
+
+    def stop(self) -> None:
+        """
+        Updates the state of the engine and emits the Stop event
+        """
+        try:
+            if self._state.is_playing:
+                self._state = dataclasses.replace(self._state, is_playing=False)
+                self._emit(PlaybackStopped())
+        except Exception as err:
+            self._emit(ErrorOccurred(message=str(err)))
+
+    def Stop(self) -> None:
+        self.stop()
+
+    def seek_sentence(self, sentence_index: int) -> None:
+        """
+        Updates the state of the enging and emits the corresponding events needed
+        """
+        #No silly, you are already on that sentence
+        if (sentence_index == self._state.current_sentence_index):
+            return # @TODO: Add event for "Already on that sentence"
+
+        try:
+            old_sentence = self._state.current_sentence_index
+            old_chapter = self._state.current_chapter_index
+            old_paragraph = self._state.current_paragraph_index
+
+            self._state = navigation.seek_to_sentence(self._state, sentence_index)
+
+            if self._state.current_chapter_index != old_chapter:
+                self._emit(ChapterChanged(chapter_index=self._state.current_chapter_index))
+            if self._state.current_sentence_index != old_sentence:
+                self._emit(SentenceChanged(sentence_index=self._state.current_sentence_index))
+            if self._state.current_paragraph_index != old_paragraph:
+                self._emit(ParagraphChanged(paragraph_index=self._state.current_paragraph_index))
+
+            # Narrow document into a local variable to satisfy type checkers
+            doc = self._state.document
+            if doc and doc.total_sentences > 0:
+                progress = (self._state.current_sentence_index + 1) / doc.total_sentences * 100.0
+                self._emit(ProgressChanged(progress_percentage=round(progress, 2)))
+
+            if doc and self._state.current_sentence_index >= doc.total_sentences - 1:
+                if self._state.is_playing:
+                    self._state = dataclasses.replace(self._state, is_playing=False)
+                    self._emit(PlaybackFinished(total_sentences_read=doc.total_sentences))
+        except Exception as err:
+            self._emit(ErrorOccurred(message=str(err)))
+
+    def seek_chapter(self, chapter_index: int) -> None:
+        try:
+            old_chapter = self._state.current_chapter_index
+            old_paragraph = self._state.current_paragraph_index
+            self._state = navigation.seek_to_chapter(self._state, chapter_index)
+
+            if self._state.current_chapter_index != old_chapter:
+                self._emit(ChapterChanged(chapter_index=self._state.current_chapter_index))
+                self._emit(SentenceChanged(sentence_index=self._state.current_sentence_index))
+            if self._state.current_paragraph_index != old_paragraph:
+                self._emit(ParagraphChanged(paragraph_index=self._state.current_paragraph_index))
+        except Exception as err:
+            self._emit(ErrorOccurred(message=str(err)))
+    
+    def seek_word(self, word_index: int) -> None:
+        try:
+            old_paragraph = self._state.current_paragraph_index
+            self._state = navigation.seek_to_word(self._state, word_index)
+            if self._state.current_paragraph_index != old_paragraph:
+                self._emit(ParagraphChanged(paragraph_index=self._state.current_paragraph_index))
+            self._emit(WordHighlighted(word_index=self._state.current_word_index))
+        except Exception as err:
+            self._emit(ErrorOccurred(message=str(err)))
+
+    def set_speed(self, speed: float) -> None:
+        try:
+            self._state = dataclasses.replace(self._state, speed=speed)
+            self._emit(SpeedSet(speed=speed))
+        except Exception as err:
+            self._emit(ErrorOccurred(message=str(err)))
+
+    def set_voice(self, voice: str) -> None:
+        try:
+            self._state = dataclasses.replace(self._state, voice=voice)
+            self._emit(VoiceSet(voice=voice))
+        except Exception as err:
+            self._emit(ErrorOccurred(message=str(err)))
+
+    def open_book(self, file_path: str) -> None:
+        try:
+            document = self._registry.load(file_path)
+            self._state = State(document=document, file_path=file_path)
+            self._emit(BookLoaded(file_path=file_path, document=document))
+        except Exception as err:
+            self._emit(ErrorOccurred(message=str(err)))
+

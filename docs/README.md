@@ -16,15 +16,15 @@ Core data model, command layer, event layer, navigation logic, and the controlle
 
 ```
 Frontend / TTS Provider / Audio Player
-              |
-       Commands (Play, Pause, SeekSentence, SetVoice, ...)
-              |
-              v
-          Controller  ---- updates ---->  State (immutable snapshot)
-              |
-       Events (PlaybackStarted, SentenceChanged, SpeedSet, ...)
-              |
-              v
+    |
+  Controller methods (play, pause, stop, seek_sentence, seek_chapter, seek_word, set_speed, set_voice)
+    |
+    v
+     Controller  ---- updates ---->  State (immutable snapshot)
+    |
+  Events (PlaybackStarted, SentenceChanged, SpeedSet, ...)
+    |
+    v
 Frontend / TTS Provider / Audio Player  (subscribed listeners)
 ```
 
@@ -80,17 +80,17 @@ paragraph = Paragraph(sentences=(sentence,), paragraph_index=0)
 chapter = Chapter(title="Chapter 1", paragraphs=(paragraph,), chapter_index=0)
 document = Document(title="My Book", chapters=(chapter,))
 
-# 2. Create the controller with that document loaded into state
+# 4. Create the controller with that document loaded into state
 controller = Controller(initial_state=State(document=document))
 
 # 3. Subscribe to events (this is what a TTS provider / UI would do)
 controller.subscribe(lambda event: print("EVENT:", event))
 
-# 4. Drive the engine with commands
-controller.handle_command(Play())
-controller.handle_command(SeekSentence(sentence_index=0))
-controller.handle_command(SetSpeed(speed=1.25))
-controller.handle_command(Pause())
+# 4. Drive the engine by calling controller methods
+controller.play()
+controller.seek_sentence(0)
+controller.set_speed(1.25)
+controller.pause()
 
 print(controller.state.current_sentence.text)  # "Hello world."
 ```
@@ -175,7 +175,7 @@ Per `docs/design.md`, the intended full system also includes pieces not yet in t
 - **TTS provider interface** — an abstract `synthesize(text) -> audio + word timings` boundary (Edge TTS, Piper, Azure, ElevenLabs, local models, etc.)
 - **Audio backend** — play/pause/stop/seek over an actual audio stream (pygame, VLC, system audio, etc.)
 - **Persistence** — saving/restoring library position, bookmarks, and settings (see `docs/examples.md` for a simple pattern using `State`'s plain fields)
-- **Caching strategy** — synthesizing only the current chapter / a sliding window of nearby sentences instead of a whole book at once
+- **Caching strategy** — synthesizing only the current chapter / a sliding window of nearby sentences instead of a whole book at once, though the engine is being setup for such things
 
 ## Running Tests
 
@@ -184,7 +184,7 @@ pip install -e . pytest
 pytest
 ```
 
-All 51 tests currently pass.
+All 60 tests currently pass.
 
 ## License
 

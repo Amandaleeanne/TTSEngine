@@ -68,12 +68,13 @@ class Chapter:
     def last_paragraph_index(self) -> int:
         return self.paragraphs[-1].paragraph_index if self.paragraphs else -1
 
+#Something smells stinky here...
 @dataclass(frozen=True)
 class Document:
     title: str
     chapters: tuple[Chapter, ...]
     
-    # Internal lookup tables mapping global indices -> parent indices
+    # Internal lookup tables mapping global indices -> parent indices for looking up the tree
     _sentence_to_chapter: dict[int, int] = field(default_factory=dict, init=False, repr=False)
     _sentence_to_paragraph: dict[int, int] = field(default_factory=dict, init=False, repr=False)
 
@@ -81,7 +82,7 @@ class Document:
         sentence_to_chap = {}
         sentence_to_para = {}
 
-        # Traverse the hierarchy once at load time to build the $O(1)$ index
+        # Traverse the hierarchy once at load time to build the $O(1)$ later index
         for chap_idx, chapter in enumerate(self.chapters):
             for para_idx, paragraph in enumerate(chapter.paragraphs):
                 for sentence in paragraph.sentences:
@@ -119,17 +120,8 @@ class Document:
     @property
     def total_sentences(self) -> int:
         return len(self._sentence_to_chapter)
-
-    @property
-    def total_words(self) -> int:
-        """Return total number of words across the whole document."""
-        count = 0
-        for chapter in self.chapters:
-            for paragraph in chapter.paragraphs:
-                for sentence in paragraph.sentences:
-                    count += len(sentence.words)
-        return count
-
+    
+    #YOU SMELL STINKY!!!! (idk how to fix you...)
     @cached_property
     def all_sentences(self) -> tuple['Sentence', ...]:
         """Flattens all sentences across chapters and paragraphs in reading order."""
