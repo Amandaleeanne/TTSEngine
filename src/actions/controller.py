@@ -2,7 +2,7 @@
 This module implements the central engine Controller.
 
 The Controller manages the application State, receives typed Commands,
-updates state using navigation rules, and dispatches Events to subscribers.
+updates state using navigation rules (see navigation.py), and dispatches Events to subscribers.
 """
 
 import dataclasses
@@ -91,7 +91,7 @@ class Controller:
 
     def seek_sentence(self, sentence_index: int) -> None:
         """
-        Updates the state of the enging and emits the corresponding events needed
+        seeks for a sentence, updates the state of the engine, and emits the corresponding events needed
         """
         #No silly, you are already on that sentence
         if (sentence_index == self._state.current_sentence_index):
@@ -125,6 +125,9 @@ class Controller:
             self._emit(ErrorOccurred(message=str(err)))
 
     def seek_chapter(self, chapter_index: int) -> None:
+        """
+        seeks for a chapter, updates the state of the engine, and emits the corresponding events needed
+        """
         try:
             old_chapter = self._state.current_chapter_index
             old_paragraph = self._state.current_paragraph_index
@@ -139,6 +142,9 @@ class Controller:
             self._emit(ErrorOccurred(message=str(err)))
     
     def seek_word(self, word_index: int) -> None:
+        """
+        seeks for a word, updates the state of the engine, and emits the corresponding events needed
+        """
         try:
             old_paragraph = self._state.current_paragraph_index
             self._state = navigation.seek_to_word(self._state, word_index)
@@ -149,6 +155,9 @@ class Controller:
             self._emit(ErrorOccurred(message=str(err)))
 
     def set_speed(self, speed: float) -> None:
+        """
+        sets the speed of the engine, and emits the corresponding event, for TTS only
+        """
         try:
             self._state = dataclasses.replace(self._state, speed=speed)
             self._emit(SpeedSet(speed=speed))
@@ -156,6 +165,9 @@ class Controller:
             self._emit(ErrorOccurred(message=str(err)))
 
     def set_voice(self, voice: str) -> None:
+        """
+        sets the voice of the engine, and emits the corresponding event, for TTS only
+        """
         try:
             self._state = dataclasses.replace(self._state, voice=voice)
             self._emit(VoiceSet(voice=voice))
@@ -163,10 +175,34 @@ class Controller:
             self._emit(ErrorOccurred(message=str(err)))
 
     def open_book(self, file_path: str) -> None:
+        """
+        loads the book into the engine and emits the corresponding events sucsessful or not
+        """
         try:
             document = self._registry.load(file_path)
             self._state = State(document=document, file_path=file_path)
             self._emit(BookLoaded(file_path=file_path, document=document))
+        except Exception as err:
+            self._emit(ErrorOccurred(message=str(err)))
+
+#@TODO:this may change to skipping to words, but for now its sentences
+    def skip_forward(self, sentences: int = 1) -> None:
+        """Skip forward by N sentences (relative seek)."""
+        try:
+            if sentences <= 0:
+                raise ValueError("sentences must be a positive integer")
+            target = self._state.current_sentence_index + sentences
+            self.seek_sentence(target)
+        except Exception as err:
+            self._emit(ErrorOccurred(message=str(err)))
+
+    def skip_backward(self, sentences: int = 1) -> None:
+        """Skip backward by N sentences (relative seek)."""
+        try:
+            if sentences <= 0:
+                raise ValueError("sentences must be a positive integer")
+            target = self._state.current_sentence_index - sentences
+            self.seek_sentence(target)
         except Exception as err:
             self._emit(ErrorOccurred(message=str(err)))
 

@@ -20,12 +20,11 @@ from actions.controller import Controller
 document = build_demo_document()  # returns a Document, see models.py
 controller = Controller(initial_state=State(document=document))
 
-def skip_forward(controller, n_sentences=5):
-    target = controller.state.current_sentence_index + n_sentences
-    controller.seek_sentence(target)
-
 controller.play()
-skip_forward(controller, n_sentences=3)
+controller.skip_forward(3)
+print(controller.state.current_chapter.title, controller.state.current_sentence.text)
+
+controller.skip_backward(2)
 print(controller.state.current_chapter.title, controller.state.current_sentence.text)
 
 controller.seek_chapter(0)  # jump back to Chapter 1

@@ -26,6 +26,8 @@ class Pause(EngineCommand):
 class Stop(EngineCommand):
     pass
 
+#TODO: Add skip forwards / skip backwards
+
 # -------- With Data --------
 
 @dataclass(frozen=True)
@@ -80,6 +82,26 @@ class SetVoice(EngineCommand):
         if not self.voice.strip():
             raise ValueError("voice cannot be empty or whitespace.")
 
+
+@dataclass(frozen=True)
+class SkipForward(EngineCommand):
+    """Request to skip forward by a number of sentences."""
+    sentences: int
+
+    def __post_init__(self) -> None:
+        if self.sentences <= 0:
+            raise ValueError(f"sentences must be a positive integer, got {self.sentences}")
+
+
+@dataclass(frozen=True)
+class SkipBackward(EngineCommand):
+    """Request to skip backward by a number of sentences."""
+    sentences: int
+
+    def __post_init__(self) -> None:
+        if self.sentences <= 0:
+            raise ValueError(f"sentences must be a positive integer, got {self.sentences}")
+
 # A type alias representing ANY valid command, for IDEs and TypeCheckers
 Command = (
     Play
@@ -91,4 +113,6 @@ Command = (
     | SeekWord
     | SetSpeed
     | SetVoice
+    | SkipForward
+    | SkipBackward
 )

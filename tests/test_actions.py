@@ -12,6 +12,7 @@ import pytest
 
 from modeling.models import Document, Chapter, Paragraph, Sentence, Word
 from modeling.state import State
+from communication.commands import *
 from communication.events import *
 from actions import navigation
 from actions.controller import Controller
@@ -179,6 +180,29 @@ class TestController:
 
         assert controller.state.current_sentence_index == 3
         assert any(isinstance(e, SentenceChanged) and e.sentence_index == 3 for e in received_events)
+
+    def test_controller_skip_forward_and_backward(self, multi_chapter_doc: Document):
+        controller = Controller()
+        received_events = []
+
+        controller.subscribe(received_events.append)
+        controller._state = State(document=multi_chapter_doc, current_sentence_index=0)
+
+        controller.skip_forward(2)
+        assert controller.state.current_sentence_index == 2
+        assert any(isinstance(e, SentenceChanged) and e.sentence_index == 2 for e in received_events)
+
+        received_events.clear()
+        controller.skip_backward(1)
+
+        assert controller.state.current_sentence_index == 1
+        assert any(isinstance(e, SentenceChanged) and e.sentence_index == 1 for e in received_events)
+
+    def test_skip_command_dataclasses_validate_positive_counts(self):
+        with pytest.raises(ValueError):
+            SkipForward(sentences=0)
+        with pytest.raises(ValueError):
+            SkipBackward(sentences=-1)
 
     def test_paragraph_changed_emitted_on_sentence_and_word_seek(self):
         """Comprehensive check: ParagraphChanged should be emitted when paragraph index changes

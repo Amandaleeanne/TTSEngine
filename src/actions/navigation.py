@@ -7,13 +7,12 @@ from modeling.state import State
 This module provides pure state-transition functions for navigating through
 a document hierarchy. Every function takes a State and returns a NEW State instance.
 
-handles logic and math for questions such as:
+This can be said that this is the "meat" of the engine as the logical layer.
+handles questions such as:
 
-"If I seek to Sentence 42, what are the new chapter, paragraph, sentence, and word indices?"
-
-"If I move to the next sentence, what is the new State?"
-
-"If I'm at the very last sentence and try to move forward, what happens?" (Boundary handling)
+- "If I seek to Sentence 42, what are the new chapter, paragraph, sentence, and word indices?"
+- "If I move to the next sentence, what is the new State?"
+- "If I'm at the very last sentence and try to move forward, what happens?" (Boundary handling)
 '''
 
 def seek_to_sentence(state: State, target_sentence_index: int) -> State:
