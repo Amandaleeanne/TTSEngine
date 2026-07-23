@@ -107,8 +107,6 @@ class TestCommands:
             SetVoice(voice="")
         with pytest.raises(ValueError, match="cannot be empty"):
             SetVoice(voice="   ")
-
-
 # =============================================================================
 # 2. Events Tests
 # =============================================================================

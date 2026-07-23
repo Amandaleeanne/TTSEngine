@@ -6,33 +6,12 @@ updates state using navigation rules, and dispatches Events to subscribers.
 """
 
 import dataclasses
+from os import path
+from importlib.resources import path
 from typing import Callable, List, Optional
 from modeling.state import State
-from communication.commands import (
-    Command,
-    OpenBook,
-    Pause,
-    Play,
-    SeekChapter,
-    SeekSentence,
-    SeekWord,
-    SetSpeed,
-    SetVoice,
-    Stop,
-)
-from communication.events import (
-    BookLoaded,
-    ChapterChanged,
-    ErrorOccurred,
-    Event,
-    PlaybackPaused,
-    PlaybackStarted,
-    PlaybackStopped,
-    SentenceChanged,
-    SpeedSet,
-    VoiceSet,
-    WordHighlighted,
-)
+from communication.commands import *
+from communication.events import *
 from actions import navigation
 
 
@@ -100,6 +79,16 @@ class Controller:
                     if self._state.current_sentence_index != old_sentence:
                         self._emit(SentenceChanged(sentence_index=self._state.current_sentence_index))
 
+                    # Progress event emission
+                    if self._state.document and self._state.document.total_sentences > 0:
+                        progress = (self._state.current_sentence_index + 1) / self._state.document.total_sentences * 100.0
+                        self._emit(ProgressChanged(progress_percentage=round(progress, 2)))
+
+                    # Detect end-of-book state
+                    if self._state.document and self._state.current_sentence_index >= self._state.document.total_sentences - 1:
+                        if self._state.is_playing:
+                            self._state = dataclasses.replace(self._state, is_playing=False)
+                            self._emit(PlaybackFinished(total_sentences_read=self._state.document.total_sentences))
                 case SeekChapter() as cmd:
                     old_chapter = self._state.current_chapter_index
                     self._state = navigation.seek_to_chapter(self._state, cmd.chapter_index)
@@ -121,7 +110,9 @@ class Controller:
                     self._emit(VoiceSet(voice=cmd.voice))
 
                 case OpenBook():
-                    pass
+                    doc = self._registry.load(path)
+                    self._state = State(document=doc, file_path=path)
+                    self._emit(BookLoaded(document=doc))
 
         except Exception as err:
             self._emit(ErrorOccurred(message=str(err)))

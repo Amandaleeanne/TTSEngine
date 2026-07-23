@@ -57,6 +57,17 @@ class SpeedSet(EngineEvent):
 class VoiceSet(EngineEvent):
     voice: str
 
+@dataclass(frozen=True)
+class ProgressChanged(EngineEvent):
+    """Emitted when playback or reading progress percentage updates."""
+    progress_percentage: float  # 0.0 to 100.0
+
+
+@dataclass(frozen=True)
+class PlaybackFinished(EngineEvent):
+    """Emitted when the engine reaches the end of the document."""
+    total_sentences_read: int
+
 
 # Master Type Union
 Event = (
@@ -64,10 +75,12 @@ Event = (
     | PlaybackStarted
     | PlaybackPaused
     | PlaybackStopped
+    | ProgressChanged
     | WordHighlighted
     | SentenceChanged
     | ChapterChanged
     | BookLoaded
     | SpeedSet
     | VoiceSet
+    | PlaybackFinished
 )

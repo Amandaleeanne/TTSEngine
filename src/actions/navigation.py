@@ -87,16 +87,28 @@ def previous_chapter(state: State) -> State:
     return seek_to_chapter(state, state.current_chapter_index - 1)
 
 
-def seek_to_word(state: State, target_word_index: int) -> State:
-    """Updates word highlighting within current sentence or shifts sentence if word belongs elsewhere."""
-    doc = state.document
-    if not doc:
+def seek_to_word(state: State, word_index: int) -> State:
+    """Seeks to a specific global word index and re-anchors sentence/chapter state."""
+    if not state.is_loaded or state.document is None:
         return state
 
-    # If the word is within current sentence bounds, just update current_word_index
-    sentence = state.current_sentence
-    if sentence and sentence.first_word_index <= target_word_index <= sentence.last_word_index:
-        return dataclasses.replace(state, current_word_index=target_word_index)
+    # Clamp word index within valid range
+    total_words = state.document.total_words
+    if total_words == 0:
+        return state
+    
+    clamped_index = max(0, min(word_index, total_words - 1))
 
-    # Otherwise, perform a sentence lookup if you maintain a word map, or fallback
-    return dataclasses.replace(state, current_word_index=target_word_index)
+    # Find the sentence containing this global word index
+    target_sentence_index = None
+    for s_idx, sentence in enumerate(state.document.all_sentences):
+        # Check if the word index falls within this sentence's word bounds
+        if sentence.words and sentence.words[0].word_index <= clamped_index <= sentence.words[-1].word_index:
+            target_sentence_index = s_idx
+            break
+
+    if target_sentence_index is not None:
+        # Re-anchor sentence and chapter indices
+        state = seek_to_sentence(state, target_sentence_index)
+
+    return dataclasses.replace(state, current_word_index=clamped_index)
