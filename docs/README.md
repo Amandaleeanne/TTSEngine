@@ -10,7 +10,7 @@ Disclaimer: I have never written an engine before, so a lot of this code is extr
 
 ## Status
 
-Core data model, command layer, event layer, navigation logic, and the controller are implemented, internally consistent, and fully unit-tested (51 passing tests). **TTS synthesis, audio playback, and document loading (EPUB/PDF/TXT parsing) are not implemented yet** — those are the pieces external consumers are expected to plug in (see [Roadmap](#roadmap--not-yet-implemented)).
+Core data model, command layer, event layer, navigation logic, and the controller are implemented, internally consistent, and fully unit-tested (51 passing tests). **TTS synthesis, audio playback, and document loading (EPUB/PDF/TXT parsing) are not implemented yet** — those are the pieces external consumers are expected to plug in (see [Roadmap](#roadmap--not-yet-implemented)). That is to say, however, a few examples can be seen in src/providers
 
 ## Architecture
 
