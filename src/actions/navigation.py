@@ -86,29 +86,34 @@ def previous_chapter(state: State) -> State:
     """Moves state to the beginning of the previous chapter."""
     return seek_to_chapter(state, state.current_chapter_index - 1)
 
-
 def seek_to_word(state: State, word_index: int) -> State:
     """Seeks to a specific global word index and re-anchors sentence/chapter state."""
     if not state.is_loaded or state.document is None:
         return state
 
-    # Clamp word index within valid range
     total_words = state.document.total_words
     if total_words == 0:
         return state
-    
+
+    # Clamp word index within valid range [0, total_words - 1]
     clamped_index = max(0, min(word_index, total_words - 1))
 
-    # Find the sentence containing this global word index
+    # Find the sentence containing this global word index safely
     target_sentence_index = None
     for s_idx, sentence in enumerate(state.document.all_sentences):
-        # Check if the word index falls within this sentence's word bounds
-        if sentence.words and sentence.words[0].word_index <= clamped_index <= sentence.words[-1].word_index:
+        if not sentence.words:
+            continue
+            
+        first_w = sentence.words[0].word_index
+        last_w = sentence.words[-1].word_index
+        
+        if first_w <= clamped_index <= last_w:
             target_sentence_index = s_idx
             break
 
+    # Re-anchor sentence, paragraph, and chapter indices
     if target_sentence_index is not None:
-        # Re-anchor sentence and chapter indices
         state = seek_to_sentence(state, target_sentence_index)
 
+    # Preserve exact word position (since seek_to_sentence defaults to first word of sentence)
     return dataclasses.replace(state, current_word_index=clamped_index)
