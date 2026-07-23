@@ -118,7 +118,7 @@ class TestNavigation:
         assert navigation.next_sentence(empty_state) == empty_state
         assert navigation.seek_to_sentence(empty_state, 5) == empty_state
 
-    def test_seek_to_word_reanchors_sentence_and_chapter(sample_document):
+    def test_seek_to_word_reanchors_sentence_and_chapter(self, sample_document):
         """Verifies seeking to a word in another chapter re-anchors sentence and chapter state."""
         state = State(document=sample_document, current_sentence_index=0, current_chapter_index=0)
         
@@ -132,7 +132,7 @@ class TestNavigation:
         assert updated_state.current_chapter_index == 1
 
 
-    def test_seek_to_word_out_of_bounds(sample_document):
+    def test_seek_to_word_out_of_bounds(self, sample_document):
         """Verifies seeking past total words clamps safely to boundary."""
         state = State(document=sample_document)
         
@@ -184,7 +184,7 @@ class TestController:
         assert controller.state.current_sentence_index == 3
         assert any(isinstance(e, SentenceChanged) and e.sentence_index == 3 for e in received_events)
 
-    def test_controller_play_idempotency():
+    def test_controller_play_idempotency(self):
         """Calling Play twice should only emit PlaybackStarted once."""
         controller = Controller()
         events = []
@@ -197,7 +197,7 @@ class TestController:
         assert len(playback_events) == 1
 
 
-    def test_controller_stop_command(loaded_controller):
+    def test_controller_stop_command(self, loaded_controller):
         """Stop command should pause playback and emit PlaybackStopped."""
         events = []
         loaded_controller.subscribe(events.append)
@@ -209,7 +209,7 @@ class TestController:
         assert any(isinstance(e, PlaybackStopped) for e in events)
 
 
-    def test_controller_set_speed_and_voice(loaded_controller):
+    def test_controller_set_speed_and_voice(self, loaded_controller):
         """SetSpeed and SetVoice updates state and emits corresponding events."""
         events = []
         loaded_controller.subscribe(events.append)
@@ -223,7 +223,7 @@ class TestController:
         assert any(isinstance(e, VoiceSet) and e.voice == "en-US-Neural" for e in events)
 
 
-    def test_controller_subscribe_deduplication_and_unsubscribe():
+    def test_controller_subscribe_deduplication_and_unsubscribe(self):
         """Duplicate subscriptions should be deduplicated and unsubscribing should stop events."""
         controller = Controller()
         events = []
@@ -240,7 +240,7 @@ class TestController:
         assert len(events) == 1  # No new event captured
 
 
-    def test_controller_error_occurred_path(monkeypatch, loaded_controller):
+    def test_controller_error_occurred_path(self, monkeypatch, loaded_controller):
         """Exceptions raised during navigation/command execution dispatch ErrorOccurred."""
         events = []
         loaded_controller.subscribe(events.append)
@@ -248,13 +248,13 @@ class TestController:
         def crashing_seek(*args):
             raise ValueError("Simulated engine failure")
 
-        monkeypatch.setattr("src.actions.navigation.seek_to_sentence", crashing_seek)
+        monkeypatch.setattr("actions.navigation.seek_to_sentence", crashing_seek)
 
         loaded_controller.handle_command(SeekSentence(sentence_index=1))
 
         assert any(isinstance(e, ErrorOccurred) and "Simulated engine failure" in e.message for e in events)
 
-    def test_full_reading_session_lifecycle(tmp_path):
+    def test_full_reading_session_lifecycle(self, tmp_path):
         """
         Integration test proving full lifecycle:
         OpenBook -> Play -> Step through sentences -> ProgressChanged -> PlaybackFinished

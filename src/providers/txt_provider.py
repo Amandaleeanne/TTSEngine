@@ -25,7 +25,8 @@ class TXTProvider(DocumentProvider):
         for s_idx, raw_s in enumerate(raw_sentences):
             words = []
             for raw_w in raw_s.split():
-                words.append(Word(text=raw_w, word_index=global_w_idx))
+                # TXT provider cannot infer timings; use zeroed times as placeholders
+                words.append(Word(text=raw_w, start_time=0.0, end_time=0.0, word_index=global_w_idx))
                 global_w_idx += 1
             
             sentences.append(

@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from functools import cached_property
 
 '''
 This module defines the models in a documents structure according to the tree hierarchy.
@@ -21,6 +22,7 @@ class Word:
     start_time: float
     end_time: float
     word_index: int #index in the global document word list
+    sentence_index: int = -1
 
     @property
     def duration(self) -> float:
@@ -91,6 +93,17 @@ class Document:
         object.__setattr__(self, "_sentence_to_chapter", sentence_to_chap)
         object.__setattr__(self, "_sentence_to_paragraph", sentence_to_para)
 
+        # Populate each Word.sentence_index for quick reverse lookups in tests
+        for chapter in self.chapters:
+            for paragraph in chapter.paragraphs:
+                for sentence in paragraph.sentences:
+                    for word in sentence.words:
+                        try:
+                            object.__setattr__(word, "sentence_index", sentence.sentence_index)
+                        except Exception:
+                            # Best-effort; if a word is not writable for some reason, skip
+                            pass
+
     def get_chapter_index_for_sentence(self, sentence_index: int) -> int:
         """Returns the chapter index for a given sentence index"""
         return self._sentence_to_chapter.get(sentence_index, -1)
@@ -106,4 +119,28 @@ class Document:
     @property
     def total_sentences(self) -> int:
         return len(self._sentence_to_chapter)
+
+    @property
+    def total_words(self) -> int:
+        """Return total number of words across the whole document."""
+        count = 0
+        for chapter in self.chapters:
+            for paragraph in chapter.paragraphs:
+                for sentence in paragraph.sentences:
+                    count += len(sentence.words)
+        return count
+
+    @cached_property
+    def all_sentences(self) -> tuple['Sentence', ...]:
+        """Flattens all sentences across chapters and paragraphs in reading order."""
+        sentences = []
+        for chapter in self.chapters:
+            for paragraph in chapter.paragraphs:
+                sentences.extend(paragraph.sentences)
+        return tuple(sentences)
+
+    @cached_property
+    def total_words(self) -> int:
+        """Helper for total word count across the entire document."""
+        return sum(len(sentence.words) for sentence in self.all_sentences)
     
