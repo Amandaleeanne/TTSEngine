@@ -22,7 +22,6 @@ class Word:
     start_time: float
     end_time: float
     word_index: int #index in the global document word list
-    sentence_index: int = -1
 
     @property
     def duration(self) -> float:
@@ -77,33 +76,28 @@ class Document:
     # Internal lookup tables mapping global indices -> parent indices for looking up the tree
     _sentence_to_chapter: dict[int, int] = field(default_factory=dict, init=False, repr=False)
     _sentence_to_paragraph: dict[int, int] = field(default_factory=dict, init=False, repr=False)
+    _word_to_sentence: dict[int, int] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         sentence_to_chap = {}
         sentence_to_para = {}
+        word_to_sentence = {}
 
-        # Traverse the hierarchy once at load time to build the $O(1)$ later index
+        # Traverse the hierarchy once at load time to build the $O(1)$ lookup indices
         for chap_idx, chapter in enumerate(self.chapters):
             for para_idx, paragraph in enumerate(chapter.paragraphs):
                 for sentence in paragraph.sentences:
                     sentence_idx = sentence.sentence_index
                     sentence_to_chap[sentence_idx] = chap_idx
                     sentence_to_para[sentence_idx] = para_idx
+                    for word in sentence.words:
+                        word_to_sentence[word.word_index] = sentence_idx
 
-        # Assign to frozen attributes
+        # Assign to frozen attributes (Document itself opts into this pattern deliberately;
+        # unlike the old Word backfill, no *other* object's fields are ever touched here)
         object.__setattr__(self, "_sentence_to_chapter", sentence_to_chap)
         object.__setattr__(self, "_sentence_to_paragraph", sentence_to_para)
-
-        # Populate each Word.sentence_index for quick reverse lookups in tests
-        for chapter in self.chapters:
-            for paragraph in chapter.paragraphs:
-                for sentence in paragraph.sentences:
-                    for word in sentence.words:
-                        try:
-                            object.__setattr__(word, "sentence_index", sentence.sentence_index)
-                        except Exception:
-                            # Best-effort; if a word is not writable for some reason, skip
-                            pass
+        object.__setattr__(self, "_word_to_sentence", word_to_sentence)
 
     def get_chapter_index_for_sentence(self, sentence_index: int) -> int:
         """Returns the chapter index for a given sentence index"""
@@ -112,6 +106,10 @@ class Document:
     def get_paragraph_index_for_sentence(self, sentence_index: int) -> int:
         """Returns the paragraph index for a given sentence index"""
         return self._sentence_to_paragraph.get(sentence_index, -1)
+
+    def get_sentence_index_for_word(self, word_index: int) -> int:
+        """Returns the sentence index for a given global word index"""
+        return self._word_to_sentence.get(word_index, -1)
 
     @property
     def total_chapters(self) -> int:
@@ -135,4 +133,3 @@ class Document:
     def total_words(self) -> int:
         """Helper for total word count across the entire document."""
         return sum(len(sentence.words) for sentence in self.all_sentences)
-    

@@ -126,9 +126,10 @@ class TestNavigation:
         target_word = sample_document.chapters[1].paragraphs[0].sentences[0].words[0]
         
         updated_state = navigation.seek_to_word(state, target_word.word_index)
-        
+        expected_sentence_index = sample_document.get_sentence_index_for_word(target_word.word_index)
+
         assert updated_state.current_word_index == target_word.word_index
-        assert updated_state.current_sentence_index == target_word.sentence_index
+        assert updated_state.current_sentence_index == expected_sentence_index
         assert updated_state.current_chapter_index == 1
 
 
